@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+*.egg-info/
+
+# Data (downloaded, not versioned)
+data/*
+!data/.gitkeep
+
+# Scratch run logs (curated results live in results/)
+checkpoints/
+runs/
+*.pth
+*.ckpt
+experiments/*
+!experiments/.gitkeep
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Notebooks
+.ipynb_checkpoints/

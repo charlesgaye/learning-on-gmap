@@ -1,0 +1,6 @@
+{"model": "MeshCNN", "seed": 0, "params": 214558, "val": 0.825, "test_at_best_val": 0.7333333333333333, "best_epoch": 22, "test_final": 0.725, "minutes": 3.9, "gemm": "index-based (buggy)"}
+{"model": "MeshCNN", "seed": 1, "params": 214558, "val": 0.7833333333333333, "test_at_best_val": 0.8083333333333333, "best_epoch": 58, "test_final": 0.8083333333333333, "minutes": 3.8, "gemm": "index-based (buggy)"}
+{"model": "MeshCNN", "gemm": "oriented", "seed": 0, "params": 214558, "val": 0.8916666666666667, "test_at_best_val": 0.8833333333333333, "best_epoch": 57, "test_final": 0.8916666666666667, "minutes": 4.1}
+{"model": "MeshCNN", "gemm": "oriented", "seed": 1, "params": 214558, "val": 0.85, "test_at_best_val": 0.8833333333333333, "best_epoch": 58, "test_final": 0.8833333333333333, "minutes": 4.0}
+{"model": "MeshCNN", "gemm": "oriented", "seed": 2, "params": 214558, "val": 0.8166666666666667, "test_at_best_val": 0.7583333333333333, "best_epoch": 49, "test_final": 0.75, "minutes": 12.3}
+{"model": "MeshCNN", "gemm": "oriented", "seed": 3, "params": 214558, "val": 0.8916666666666667, "test_at_best_val": 0.9, "best_epoch": 50, "test_final": 0.9083333333333333, "minutes": 12.6}
