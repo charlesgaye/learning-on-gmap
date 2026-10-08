@@ -9,6 +9,7 @@ Cells are orbits: vertex = ⟨α₁,α₂⟩, edge = ⟨α₀,α₂⟩, face = �
 """
 
 from __future__ import annotations
+from collections.abc import Sequence
 from dataclasses import dataclass
 import numpy as np
 
@@ -32,7 +33,7 @@ class GMap2:
         return len(self.alpha)
 
 
-def build_gmap(faces: np.ndarray) -> GMap2:
+def build_gmap(faces: Sequence[Sequence[int]] | np.ndarray) -> GMap2:
     """Build the 2-G-map of a polygon mesh (F, S(f)) with S(f) the size of face f
         -> GMap2 with D = Sum_F 2 * S(f) darts, in O(D).
 
@@ -59,7 +60,7 @@ def build_gmap(faces: np.ndarray) -> GMap2:
         if s < 3:
             raise ValueError (f"degenerated face only {s} vertices")
         if len(set(face)) < s:
-            raise ValueError (f"degerated face self looping")
+            raise ValueError (f"degenerated face self looping")
         edges = [tuple(sorted((face[i], face[(i+1)%s]))) for i in range(s)]
         for i in range(s):
             edge = edges[i]
