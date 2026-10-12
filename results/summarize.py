@@ -1,4 +1,5 @@
-"""Rebuild the README tables from the raw run logs in results/*.jsonl.
+"""Rebuild the README tables from the raw run logs in results/*.jsonl
+(orbit_cross_runs.jsonl: runs on mixed triangle/quad meshes, with cross-representation tests).
 
     cd meshcnn-repro
     python results/summarize.py
@@ -68,6 +69,29 @@ def main():
         ("index-based convention (buggy)", m("index-based (buggy)", seeds=s01)),
         ("oriented convention (fixed)", m("oriented", seeds=s01)),
     ])
+
+    # Mixed triangle/quad meshes (gmapnet.quadify), E,F,V + LayerNorm + dispersion, seeds 0-3.
+    cross = load("orbit_cross_runs.jsonl")
+
+    def c(mesh):
+        return sorted([r for r in cross if r["mesh"] == mesh], key=lambda r: r["seed"])
+
+    table("Mixed triangle/quad meshes (OrbitCNN E,F,V + LayerNorm + dispersion, seeds 0-3)", [
+        ("triangles (re-run)", c("tri")),
+        ("mixed, min_dihedral = 160° (66 % of triangles merged)", c("quad160")),
+        ("mixed, min_dihedral = 140° (79 % of triangles merged)", c("quad140")),
+    ])
+    names = {"tri": "triangles", "quad160": "mixed 160°", "quad140": "mixed 140°"}
+    print("\n### Transfer without retraining (test accuracy, seeds 0-3)\n")
+    print("| trained on | tested on | test per seed | test (mean ± sd) |")
+    print("|---|---|---|---|")
+    for train in ("tri", "quad160", "quad140"):
+        runs = c(train)
+        for other in runs[0]["cross"]:
+            accs = [100 * r["cross"][other] for r in runs]
+            per_seed = " / ".join(f"{a:.1f}" for a in accs)
+            print(f"| {names[train]} | {names[other]} | {per_seed} | "
+                  f"**{st.mean(accs):.1f}** ± {st.stdev(accs):.1f} |")
 
 
 if __name__ == "__main__":

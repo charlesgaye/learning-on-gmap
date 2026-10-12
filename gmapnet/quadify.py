@@ -3,8 +3,10 @@
 The only function is quadify, which takes a triangle mesh and outputs a mixed
 mesh obtained with a greedy approach. Triangles are merged by pairs; the value
 of the dihedral angle they form gives the order in which the pairs are considered.
-Pairs whose dihedral angle is too small are rejected, in order to preserve the
-shape of the mesh.
+Pairs whose dihedral angle is too small are rejected: the shared edge disappears
+with its dihedral angle, one of the geometric features given to the network, so
+only nearly flat edges, whose dihedral angle carries little shape information,
+are removed.
 """
 
 
@@ -17,12 +19,29 @@ from gmapnet.features import dihedral, walk
 def quadify(P, F, min_dihedral=np.deg2rad(160)) -> list[list[int]]:
     """Build the list of faces list[list[int]] of the output mesh.
 
+    P : (V, 3) array of the 3D positions of the vertices
+    F : (F, 3) array (or list) of the initial triangular faces
+    min_dihedral : filtering criterion, in radians (π = flat edge)
+
     From the faces of the object, the edges are listed. Then two filters are
     applied: one removes the boundary edges, the other removes the edges that are
     important for the shape of the object, identified by the dihedral angle
-    between their two adjacent faces.
-    The remaining edges are sorted by dihedral angle, and a greedy loop creates
-    the merged faces. Every face that was not merged is finally added to the list.
+    between their two adjacent faces (dihedral < min_dihedral).
+    The remaining edges are sorted by decreasing dihedral angle (flattest first);
+    ties are broken by dart number (stable sort), so the output is deterministic.
+    The candidate quads go through one last filter, which removes the quads that
+    would not be convex. At the two new corners a and b, the cross product of the
+    corner's edges must have a positive dot product with the normal of the quad
+    (the convention of features.corner_angle). The corners c and d' keep their
+    triangle corner and stay convex as long as min_dihedral >= π/2.
+
+    Then a greedy loop creates the merged faces, each represented by a list of size
+    4, [a, c, b, d'], where (a, b) is the removed edge, which becomes a diagonal.
+    One pass is enough: the criteria do not depend on earlier merges, and a merged
+    triangle is never available again, so a rejected candidate stays rejected.
+    Every face that was not merged is finally added to the list. This process
+    preserves the vertices, the Euler characteristic of the mesh, and every input
+    triangle is used exactly once (the output is a partition of the input).
     """
 
     init_gmap = build_gmap(F)

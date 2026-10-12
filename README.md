@@ -6,7 +6,7 @@ setting I already knew well. It starts from a reproduction of **MeshCNN**
 (G-maps), the combinatorial structure used in topology-based geometric modelling. The network
 computes on **darts** and pools information over **orbits** (vertices, edges, faces). It is
 designed to extend beyond triangle meshes to general combinatorial maps; so far it has only
-been evaluated on triangle mesh classification (SHREC-16).
+been evaluated on triangle and mixed mesh classification (SHREC-16).
 
 **Main result.** On SHREC-16 classification, under an identical protocol, the dart network with
 orbit pooling matches my reproduction of MeshCNN: 85.6 % vs 85.6 % mean test accuracy over
@@ -75,6 +75,23 @@ Dispersion improves test accuracy on each of the 4 seeds (+4.6 points on average
 control has as many parameters as the dispersion model and does not improve, so the gain is not
 explained by capacity.
 
+### Comparison for mixed meshes (seeds 0-3)
+
+OrbitCNN E,F,V + LayerNorm + dispersion; each triangle mesh is turned into a mixed triangle/quad
+mesh by `gmapnet/quadify.py` (same shapes, same splits).
+
+| mesh | test per seed | test (mean ± sd) | val (mean) |
+|---|---|---|---|
+| triangles (re-run) | 86.7 / 90.0 / 82.5 / 85.8 | **86.2 ± 3.1** | 86.9 |
+| mixed, min_dihedral = 160° (66 % of triangles merged) | 80.0 / 87.5 / 87.5 / 86.7 | **85.4 ± 3.6** | 82.5 |
+| mixed, min_dihedral = 140° (79 % of triangles merged) | 90.8 / 90.0 / 86.7 / 94.2 | **90.4 ± 3.1** | 90.4 |
+
+Results obtained on the mixed meshes with a strong filter (min_dihedral = 160°) are on par with
+those on the triangle meshes. With a slightly weaker filter (min_dihedral = 140°), the results are
+promising (at least on par on each seed) but would require more seeds to be established. Finally,
+the triangle re-run reproduces the original results exactly on 3 seeds out of 4; the difference on
+seed 2 (82.5 vs 80.0) probably comes from the original runs having been run in parallel.
+
 ### Which orbit types matter (no normalisation, seeds 0–1)
 
 | orbits pooled | params | test per seed | test (mean ± sd) |
@@ -101,6 +118,29 @@ vertices were numbered. The original MeshCNN orders them by face orientation, wh
 (`src/mesh.py`, now tested against vertex renumbering in `tests/test_meshconv.py`) raised its accuracy
 from 77.1 % to 88.3 % (seeds 0–1). All MeshCNN numbers above use the corrected version.
 
+### Transfer between mesh representations (without retraining)
+
+The model kept at the best-validation epoch is tested, without retraining, on the test meshes of
+another representation (features standardised with the statistics of the training representation).
+
+| trained on | tested on | test per seed | test (mean ± sd) |
+|---|---|---|---|
+| triangles | mixed 160° | 48.3 / 27.5 / 7.5 / 64.2 | **36.9 ± 24.7** |
+| triangles | mixed 140° | 39.2 / 22.5 / 7.5 / 63.3 | **33.1 ± 23.9** |
+| mixed 160° | triangles | 66.7 / 20.0 / 48.3 / 40.8 | **44.0 ± 19.3** |
+| mixed 160° | mixed 140° | 80.0 / 84.2 / 85.0 / 85.0 | **83.5 ± 2.4** |
+| mixed 140° | triangles | 50.0 / 45.8 / 22.5 / 26.7 | **36.2 ± 13.7** |
+| mixed 140° | mixed 160° | 90.0 / 89.2 / 86.7 / 91.7 | **89.4 ± 2.1** |
+
+To test how much the learned classifier depends on the combinatorial support, each trained model
+was evaluated on other representations of the same test shapes: a change of filtering criterion
+between mixed meshes, and the change from triangle meshes to mixed meshes and back.
+The transfer between mixed and triangle meshes fails (33 to 44 % on average, with a large spread
+across seeds): the network relies heavily on the combinatorial structure of the meshes it was
+trained on, and is not invariant to this change of discretization (the topology of the shapes is
+unchanged). The transfer between the two mixed variants works (−1 to −2 points), which suggests that
+training on several representations at once could make the network more robust.
+
 ## Limitations
 
 - One small dataset (SHREC-16, 480 training meshes); 4 seeds for the main comparison, 2 for the
@@ -109,8 +149,10 @@ from 77.1 % to 88.3 % (seeds 0–1). All MeshCNN numbers above use the corrected
   under my protocol. These numbers are not comparable to those reported in the MeshCNN paper.
 - The dart network costs about 2× the parameters and roughly 7× the training time of the MeshCNN
   reproduction (D = 3000 darts vs E = 750 edges per mesh).
-- Only closed, consistently oriented triangle meshes have been tested; the extension to general
-  cells and higher dimensions is designed in, not demonstrated.
+- Only closed, consistently oriented triangle and mixed meshes have been tested; the extension to
+  general cells and higher dimensions is designed in, not demonstrated.
+- The mixed meshes are obtained by merging pairs of SHREC-16 triangles into quads (nearly flat and
+  convex by construction), not by remeshing: native quad-dominant meshes remain to be tested.
 
 ## Transparency: use of an AI assistant
 
@@ -135,6 +177,7 @@ gmapnet/             learning on G-maps
   features.py        orbit features; MeshCNN features recovered as words in the involutions
   dartconv.py        DartConv
   orbitconv.py       orbit mean / dispersion, OrbitDartConv, OrbitCNN classifier
+  quadify.py         triangle mesh -> mixed triangle/quad mesh (greedy merging of flat pairs)
   data.py            SHREC-16 as G-maps, validation split
   train_orbit.py     one OrbitCNN run (configuration, seed)
   train_meshcnn_protocol.py   the MeshCNN reproduction under the same protocol
