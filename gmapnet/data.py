@@ -8,6 +8,13 @@ Features per dart (gmapnet.features), chosen with FEATURES:
 The default (first three) is the fair comparison with MeshCNN: the 4 darts of an edge then
 carry the same information as the 5 MeshCNN features (opposite angle = π − the edge's two
 corners in that face).
+
+Mesh variant: by default the SHREC triangle meshes are used as they are. With
+quad_deg = θ (degrees), each mesh is first turned into a mixed triangle/quad mesh by
+gmapnet.quadify.quadify(min_dihedral = θ): same shapes, same files, same splits; only the
+representation changes. The variant, θ and QUADIFY_VERSION are part of the cache key, so the
+triangle and the quad caches can never be confused, and a change to quadify cannot silently
+reuse a stale cache.
 """
 from __future__ import annotations
 import glob
@@ -20,10 +27,12 @@ import trimesh
 
 from gmapnet.gmap import build_gmap, orbits
 from gmapnet import features as FT
+from gmapnet.quadify import quadify
 
 ROOT = "data/shrec_16"
 FEATURES = ("dihedral", "corner", "ratio")
 VAL_PER_CLASS = 4
+QUADIFY_VERSION = 2     # part of the quad cache key: bump it whenever quadify's output changes
 
 _FN = {"dihedral": FT.dihedral, "corner": FT.corner_angle,
        "ratio": FT.incidence_ratio, "defect": FT.angle_defect}
@@ -33,9 +42,14 @@ def list_classes(root: str = ROOT) -> list[str]:
     return sorted(d for d in os.listdir(root) if os.path.isdir(os.path.join(root, d)))
 
 
-def load_split(split: str, classes: list[str]):
-    """-> list of (x (C, D) float, alpha (D, 3) long, label). Cached on disk (.pt)."""
-    key = hashlib.md5(("|".join(classes) + "|" + split + "|" + ",".join(FEATURES)).encode()).hexdigest()[:8]
+def load_split(split: str, classes: list[str], quad_deg: float | None = None):
+    """-> list of (x (C, D) float, alpha (D, 3) long, label). Cached on disk (.pt).
+
+    quad_deg: None for the triangle meshes, or the quadify threshold in degrees.
+    """
+    # empty tag keeps the triangle key unchanged; the version invalidates stale quad caches
+    tag = "" if quad_deg is None else f"|quad{quad_deg:g}|v{QUADIFY_VERSION}"
+    key = hashlib.md5(("|".join(classes) + "|" + split + "|" + ",".join(FEATURES) + tag).encode()).hexdigest()[:8]
     cache = os.path.join(ROOT, f".cache_dart_{split}_{key}.pt")
     if os.path.exists(cache):
         return torch.load(cache, weights_only=False)
@@ -44,6 +58,8 @@ def load_split(split: str, classes: list[str]):
         for path in sorted(glob.glob(os.path.join(ROOT, cls, split, "*.obj"))):
             tm = trimesh.load(path, process=False)
             P, F = np.asarray(tm.vertices, float), np.asarray(tm.faces)
+            if quad_deg is not None:
+                F = quadify(P, F, min_dihedral=np.deg2rad(quad_deg))
             g = build_gmap(F)
             x = np.stack([_FN[f](g, P) for f in FEATURES])          # (C, D)
             items.append((torch.tensor(x, dtype=torch.float),

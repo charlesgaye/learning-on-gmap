@@ -146,8 +146,8 @@ def meshcnn_features(g: GMap2, P: np.ndarray) -> np.ndarray:
     angles = corner_angle(g, P)
     ratios = incidence_ratio(g, P)
     dihedrals = dihedral(g, P)
-    vertex = orbits(g.alpha, (0, 2))
-    first = np.unique(vertex, return_index=True)[1]
+    edges = orbits(g.alpha, (0, 2))
+    first = np.unique(edges, return_index=True)[1]
 
 
     return np.stack([dihedrals[first],

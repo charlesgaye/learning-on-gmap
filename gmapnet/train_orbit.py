@@ -11,11 +11,21 @@ Usage:
     python -m gmapnet.train_orbit E,F,V+d+n 0      # 𝒪 = {edge, face, vertex}, dispersion, LayerNorm, seed 0
     python -m gmapnet.train_orbit - 1              # 𝒪 = ∅ (plain DartConv), seed 1
     python -m gmapnet.train_orbit E,F,V+n 0 76,152,304   # custom widths (parameter-matched control)
+    python -m gmapnet.train_orbit E,F,V+d+n 0 64,128,256 quad160   # mixed triangle/quad meshes
+    python -m gmapnet.train_orbit E,F,V+d+n 0 64,128,256 tri quad160,quad140   # + cross-evaluation
 Orbit codes: E = edge ⟨α₀,α₂⟩, F = face ⟨α₀,α₁⟩, V = vertex ⟨α₁,α₂⟩.
 Suffixes: "+d" adds orbit DISPERSION; "+n" adds a per-dart LayerNorm before each ReLU.
-Output: one JSON line appended to experiments/orbit_ablations.jsonl.
+Mesh variant (4th argument): "quadθ" turns every mesh into a mixed triangle/quad mesh with
+gmapnet.quadify (threshold θ degrees on the dihedral of the removed edge); default: triangles.
+Cross-evaluation (5th argument): comma-separated mesh variants; the model kept at the
+best-validation epoch is also tested on the TEST meshes of each variant, without retraining
+(features standardised with the statistics of the training variant).
+Output: one JSON line appended to experiments/orbit_ablations.jsonl (triangles),
+experiments/orbit_quad.jsonl (quad variant, with the mean number of darts per mesh), or
+experiments/orbit_cross.jsonl (any run with a cross-evaluation).
 """
 from __future__ import annotations
+import copy
 import json
 import os
 import sys
@@ -55,10 +65,13 @@ def main() -> None:
     code = sys.argv[1] if len(sys.argv) > 1 else "E,F,V"
     seed = int(sys.argv[2]) if len(sys.argv) > 2 else 0
     widths = tuple(int(w) for w in sys.argv[3].split(",")) if len(sys.argv) > 3 else WIDTHS
+    mesh = sys.argv[4] if len(sys.argv) > 4 else "tri"
+    quad_deg = _quad_deg(mesh)
+    cross = sys.argv[5].split(",") if len(sys.argv) > 5 else []
     types, dispersion, norm = parse_code(code)
 
     classes = list_classes()
-    tr_raw, te_raw = load_split("train", classes), load_split("test", classes)
+    tr_raw, te_raw = load_split("train", classes, quad_deg), load_split("test", classes, quad_deg)
     all_d = torch.cat([x for x, _, _ in tr_raw], dim=1)
     mean, std = all_d.mean(1, keepdim=True), all_d.std(1, keepdim=True) + 1e-6
     tr_all = with_labels(standardize(tr_raw, mean, std), types)
@@ -71,7 +84,7 @@ def main() -> None:
                                dispersion=dispersion, norm=norm)
     opt = torch.optim.Adam(model.parameters(), lr=LR)
     crit = nn.CrossEntropyLoss()
-    print(f"O={code} seed={seed} | train={len(train)} val={len(val)} test={len(test)} | "
+    print(f"O={code} seed={seed} mesh={mesh} | train={len(train)} val={len(val)} test={len(test)} | "
           f"params={sum(p.numel() for p in model.parameters()):,}", flush=True)
 
     best = {"val": -1.0}
@@ -85,16 +98,37 @@ def main() -> None:
         va = accuracy(model, val)
         if va > best["val"]:
             best = {"val": va, "test": accuracy(model, test), "epoch": epoch}
+            best_state = copy.deepcopy(model.state_dict())
         if epoch % 10 == 0 or epoch == EPOCHS - 1:
             print(f"  epoch {epoch:2d}  val {va:.2f}  (best val {best['val']:.2f} @ {best['epoch']})", flush=True)
     final_test = accuracy(model, test)
     res = {"O": code, "seed": seed, "widths": list(widths),
            "params": sum(p.numel() for p in model.parameters()), "val": best["val"], "test_at_best_val": best["test"],
            "best_epoch": best["epoch"], "test_final": final_test, "minutes": round((time.time() - t0) / 60, 1)}
+    if cross:
+        # the best-validation model, tested on other representations of the same test shapes
+        model.load_state_dict(best_state)
+        res["cross"] = {}
+        for other in cross:
+            te_other = load_split("test", classes, _quad_deg(other))
+            res["cross"][other] = accuracy(model, with_labels(standardize(te_other, mean, std), types))
+    out_file = "experiments/orbit_ablations.jsonl"
+    if quad_deg is not None:
+        darts = [x.shape[1] for x, _, _ in tr_raw + te_raw]
+        res.update({"mesh": mesh, "quad_deg": quad_deg, "mean_darts": round(sum(darts) / len(darts), 1)})
+        out_file = "experiments/orbit_quad.jsonl"
+    if cross:
+        res["mesh"] = mesh
+        out_file = "experiments/orbit_cross.jsonl"
     print(json.dumps(res), flush=True)
     os.makedirs("experiments", exist_ok=True)
-    with open("experiments/orbit_ablations.jsonl", "a", encoding="utf-8") as f:
+    with open(out_file, "a", encoding="utf-8") as f:
         f.write(json.dumps(res) + "\n")
+
+
+def _quad_deg(mesh: str):
+    """'tri' -> None, 'quad160' -> 160.0."""
+    return float(mesh[4:]) if mesh.startswith("quad") else None
 
 
 if __name__ == "__main__":
